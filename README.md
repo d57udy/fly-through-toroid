@@ -2,6 +2,8 @@
 
 An interactive 3D toroid made of smaller toroids. The small toroids sit along the centre line of the big ring with their holes aligned to it, so flying along the ring takes you through every one of them.
 
+**Live page:** https://d57udy.github.io/fly-through-toroid/
+
 Plain HTML, CSS and JavaScript with [three.js](https://threejs.org) 0.170 loaded from the jsDelivr CDN. There is no build step, so it runs as-is on the free tier of GitHub Pages.
 
 ## Run locally
