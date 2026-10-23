@@ -2,6 +2,11 @@ import { DEFAULTS, MATERIALS, ENVIRONMENTS, QUALITY } from './config.js';
 
 const SECTIONS = [
 	{
+		title: 'Saved configurations', open: true, controls: [
+			{ type: 'library' },
+		],
+	},
+	{
 		title: 'Toroid', open: true, controls: [
 			{ key: 'ringDiameter', label: 'Ring diameter', min: 6, max: 80, step: 0.1, digits: 1 },
 			{ key: 'toroidDiameter', label: 'Toroid diameter', min: 0.4, max: 16, step: 0.05, digits: 2, hint: 'Centre line of each small toroid' },
@@ -133,6 +138,7 @@ export class Panel {
 			else if ( type === 'color' ) content.append( this.buildColor( spec ) );
 			else if ( type === 'toggles' ) content.append( this.buildToggles( spec ) );
 			else if ( type === 'swatches' ) content.append( this.buildSwatches( spec ) );
+			else if ( type === 'library' ) content.append( this.buildLibrary() );
 			else if ( type === 'readout' ) {
 
 				const node = el( 'div', { class: 'readout', id: spec.id } );
@@ -305,6 +311,100 @@ export class Panel {
 		};
 
 		return grid;
+
+	}
+
+	buildLibrary() {
+
+		const input = el( 'input', { type: 'text', class: 'name-input', placeholder: 'Name (optional)', maxlength: 60, 'aria-label': 'Configuration name' } );
+		const save = el( 'button', { class: 'btn btn-primary', text: 'Save current' } );
+		save.addEventListener( 'click', () => {
+
+			this.onAction( 'save', input.value.trim() );
+			input.value = '';
+
+		} );
+		input.addEventListener( 'keydown', ( e ) => {
+
+			if ( e.key === 'Enter' ) save.click();
+
+		} );
+
+		const list = el( 'ul', { class: 'saved-list' } );
+		const note = el( 'p', { class: 'saved-note' } );
+		this.library = { list, note, save };
+
+		return el( 'div', { class: 'control library' }, [ el( 'div', { class: 'save-row' }, [ input, save ] ), list, note ] );
+
+	}
+
+	renderLibrary( entries, available ) {
+
+		const { list, note, save } = this.library;
+		list.replaceChildren();
+		save.disabled = ! available;
+
+		if ( ! available ) note.textContent = 'This browser blocks local storage, so configurations cannot be saved here.';
+		else if ( entries.length === 0 ) note.textContent = 'Nothing saved yet. Saved configurations stay in this browser only.';
+		else note.textContent = 'Click a name to load it. Stored in this browser only.';
+
+		for ( const entry of entries ) {
+
+			const p = entry.params || {};
+			const meta = [
+				MATERIALS[ p.material ]?.label,
+				ENVIRONMENTS[ p.environment ]?.label,
+				new Date( entry.savedAt ).toLocaleDateString( undefined, { day: 'numeric', month: 'short' } ),
+			].filter( Boolean ).join( ' · ' );
+
+			const load = el( 'button', { class: 'saved-load', title: 'Load this configuration', onclick: () => this.onAction( 'load', entry.id ) }, [
+				el( 'span', { class: 'saved-name', text: entry.name } ),
+				el( 'span', { class: 'saved-meta', text: meta } ),
+			] );
+
+			// Two step delete without a browser dialog: the first click arms it.
+			const remove = el( 'button', { class: 'saved-delete', title: 'Delete', 'aria-label': `Delete ${ entry.name }` } );
+			remove.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+			let timer = 0;
+			remove.addEventListener( 'click', () => {
+
+				if ( remove.classList.contains( 'confirm' ) ) {
+
+					clearTimeout( timer );
+					this.onAction( 'delete', entry.id );
+					return;
+
+				}
+
+				remove.classList.add( 'confirm' );
+				remove.textContent = 'Delete?';
+				timer = setTimeout( () => {
+
+					remove.classList.remove( 'confirm' );
+					remove.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
+				}, 3000 );
+
+			} );
+
+			list.append( el( 'li', { class: 'saved-item', 'data-id': entry.id }, [ load, remove ] ) );
+
+		}
+
+	}
+
+	flashSaved( message, id ) {
+
+		const { list, save } = this.library;
+		save.textContent = message;
+		setTimeout( () => ( save.textContent = 'Save current' ), 1300 );
+		const item = id && list.querySelector( `[data-id="${ CSS.escape( id ) }"]` );
+		if ( item ) {
+
+			item.classList.add( 'flash' );
+			setTimeout( () => item.classList.remove( 'flash' ), 1300 );
+
+		}
 
 	}
 

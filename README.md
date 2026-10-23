@@ -32,11 +32,17 @@ The empty `.nojekyll` file tells Pages to serve the files as they are.
 |---|---|
 | Orbit (`1`) | Drag to rotate, right drag to pan, scroll to zoom |
 | Fly (`2`) | Drag to look, `W` `A` `S` `D` to move, `Q` / `E` down and up, `Shift` to boost, scroll to change speed |
-| Ride through (`3`) | Automatic flight along the ring through every toroid. Drag to look around |
+| Ride through (`3`) | Automatic flight along the ring through every toroid. Drag or use the arrow keys to look around; the view stays turned relative to the direction of travel until you press `C` or double click to face forward again |
 
 Other keys: `R` reset view, `H` hide the panel, `P` save a screenshot, `Esc` back to orbit.
 
 Double click any slider to reset it. Click a slider's number to type an exact value. The current settings are kept in the URL, so **Copy link** shares an exact configuration.
+
+## Saved configurations
+
+**Save current** stores the current settings in this browser (`localStorage`), under the name you type or an automatic one such as "Copper, Dark studio". Saving under an existing name updates it. Click a saved name to load it; the × button deletes it after a second click to confirm. Saved configurations never leave the browser, so they are not shared between browsers or devices (use **Copy link** for that).
+
+The page also remembers your last settings and restores them when you open it again. A shared link always takes priority over the remembered settings.
 
 ## Settings
 
@@ -62,6 +68,7 @@ js/toroid.js        ring path and instanced toroids
 js/environments.js  backdrops and lighting environments
 js/camera.js        orbit, fly and ride camera modes
 js/ui.js            settings panel
+js/storage.js       saved configurations and last session (localStorage)
 js/config.js        defaults and presets
 ```
 

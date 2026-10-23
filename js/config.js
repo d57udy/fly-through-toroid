@@ -187,3 +187,49 @@ export const QUALITY = {
 };
 
 export const MAX_COUNT = 240;
+
+const ENUMS = {
+	material: MATERIALS,
+	environment: ENVIRONMENTS,
+	quality: QUALITY,
+	colorMode: { uniform: 1, alternate: 1, gradient: 1, rainbow: 1 },
+	toneMapping: { aces: 1, agx: 1, neutral: 1 },
+};
+
+// Keeps only known keys with values of the right type, from any source
+// (URL hash, saved configuration, last session).
+export function sanitizeParams( raw ) {
+
+	const out = {};
+	if ( ! raw || typeof raw !== 'object' ) return out;
+
+	for ( const [ key, def ] of Object.entries( DEFAULTS ) ) {
+
+		if ( ! ( key in raw ) ) continue;
+		const v = raw[ key ];
+
+		if ( typeof def === 'number' ) {
+
+			const n = typeof v === 'number' ? v : parseFloat( v );
+			if ( Number.isFinite( n ) ) out[ key ] = n;
+
+		} else if ( typeof def === 'boolean' ) {
+
+			out[ key ] = v === true || v === 1 || v === '1' || v === 'true';
+
+		} else if ( typeof v === 'string' ) {
+
+			if ( key in ENUMS ) {
+
+				if ( Object.hasOwn( ENUMS[ key ], v ) ) out[ key ] = v;
+
+			} else if ( /^#[0-9a-f]{6}$/i.test( v ) ) out[ key ] = v.toLowerCase();
+
+		}
+
+	}
+
+	if ( 'count' in out ) out.count = Math.min( MAX_COUNT, Math.max( 3, Math.round( out.count ) ) );
+	return out;
+
+}

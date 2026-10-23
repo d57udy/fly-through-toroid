@@ -35,9 +35,11 @@ export class CameraRig {
 
 		// Ride state
 		this.rideTheta = 0;
+		// Look direction relative to the direction of travel. It stays where the
+		// user puts it until they recenter (C or double click).
 		this.lookYaw = 0;
 		this.lookPitch = 0;
-		this.lastLook = 0;
+		this.recentering = false;
 
 		this.dragging = false;
 		this.tween = null;
@@ -81,9 +83,9 @@ export class CameraRig {
 
 			} else if ( this.mode === 'ride' ) {
 
-				this.lookYaw = THREE.MathUtils.clamp( this.lookYaw - dx * LOOK_SENSITIVITY, - 2.6, 2.6 );
-				this.lookPitch = THREE.MathUtils.clamp( this.lookPitch - dy * LOOK_SENSITIVITY, - 1.4, 1.4 );
-				this.lastLook = performance.now();
+				this.lookYaw = wrapAngle( this.lookYaw - dx * LOOK_SENSITIVITY );
+				this.lookPitch = THREE.MathUtils.clamp( this.lookPitch - dy * LOOK_SENSITIVITY, - 1.5, 1.5 );
+				this.recentering = false;
 
 			}
 
@@ -93,13 +95,18 @@ export class CameraRig {
 
 			if ( ! this.dragging ) return;
 			this.dragging = false;
-			this.lastLook = performance.now();
 			if ( dom.hasPointerCapture( e.pointerId ) ) dom.releasePointerCapture( e.pointerId );
 
 		};
 
 		dom.addEventListener( 'pointerup', end );
 		dom.addEventListener( 'pointercancel', end );
+
+		dom.addEventListener( 'dblclick', () => {
+
+			if ( this.mode === 'ride' ) this.recenter();
+
+		} );
 
 		dom.addEventListener( 'wheel', ( e ) => {
 
@@ -114,6 +121,7 @@ export class CameraRig {
 
 			if ( isTyping( e.target ) ) return;
 			this.keys.add( e.code );
+			if ( e.code === 'KeyC' && this.mode === 'ride' ) this.recenter();
 
 		} );
 
@@ -174,11 +182,19 @@ export class CameraRig {
 			this.rideTheta = Math.atan2( local.z, local.x );
 			this.lookYaw = 0;
 			this.lookPitch = 0;
+			this.recentering = false;
 			this._startTween( () => this._ridePose(), 1.8, null );
 
 		}
 
 		this.onModeChange( mode );
+
+	}
+
+	// Smoothly turn back to face the direction of travel.
+	recenter() {
+
+		this.recentering = true;
 
 	}
 
@@ -250,12 +266,29 @@ export class CameraRig {
 
 			this.rideTheta = ( this.rideTheta + this.rideSpeed * dt / this.ring.speedAt( this.rideTheta ) ) % TAU;
 
-			// Ease the look direction back to straight ahead after a short pause.
-			if ( ! this.dragging && performance.now() - this.lastLook > 900 ) {
+			// Arrow keys turn the view; it then stays put relative to the motion.
+			const k = this.keys;
+			const turn = ( k.has( 'ArrowLeft' ) ? 1 : 0 ) - ( k.has( 'ArrowRight' ) ? 1 : 0 );
+			const tilt = ( k.has( 'ArrowUp' ) ? 1 : 0 ) - ( k.has( 'ArrowDown' ) ? 1 : 0 );
+			if ( turn || tilt ) {
 
-				const k = 1 - Math.exp( - dt * 2.2 );
-				this.lookYaw -= this.lookYaw * k;
-				this.lookPitch -= this.lookPitch * k;
+				this.lookYaw = wrapAngle( this.lookYaw + turn * 1.6 * dt );
+				this.lookPitch = THREE.MathUtils.clamp( this.lookPitch + tilt * 1.2 * dt, - 1.5, 1.5 );
+				this.recentering = false;
+
+			}
+
+			if ( this.recentering ) {
+
+				const a = 1 - Math.exp( - dt * 5 );
+				this.lookYaw -= this.lookYaw * a;
+				this.lookPitch -= this.lookPitch * a;
+				if ( Math.abs( this.lookYaw ) + Math.abs( this.lookPitch ) < 1e-3 ) {
+
+					this.lookYaw = this.lookPitch = 0;
+					this.recentering = false;
+
+				}
 
 			}
 
@@ -319,6 +352,12 @@ export class CameraRig {
 		this.camera.position.addScaledVector( this.velocity, dt );
 
 	}
+
+}
+
+function wrapAngle( a ) {
+
+	return ( ( a + Math.PI ) % TAU + TAU ) % TAU - Math.PI;
 
 }
 

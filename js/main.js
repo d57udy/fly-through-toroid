@@ -6,11 +6,12 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 
-import { DEFAULTS, HIDDEN_MATERIAL_DEFAULTS, MATERIALS, ENVIRONMENTS, QUALITY } from './config.js';
+import { DEFAULTS, HIDDEN_MATERIAL_DEFAULTS, MATERIALS, ENVIRONMENTS, QUALITY, sanitizeParams } from './config.js';
 import { ToroidRing } from './toroid.js';
 import { Environments } from './environments.js';
 import { CameraRig } from './camera.js';
 import { Panel } from './ui.js';
+import * as storage from './storage.js';
 
 const DEG = Math.PI / 180;
 
@@ -18,7 +19,9 @@ const app = document.getElementById( 'app' );
 const viewport = document.getElementById( 'viewport' );
 const canvas = document.getElementById( 'scene' );
 
-const params = { ...DEFAULTS, ...readHash() };
+// A shared link wins; otherwise reopen the settings from the last visit.
+const fromHash = readHash();
+const params = { ...DEFAULTS, ...( Object.keys( fromHash ).length ? fromHash : sanitizeParams( storage.loadLast() ) ) };
 
 // ---------------------------------------------------------------- renderer
 
@@ -476,7 +479,8 @@ function onParamChange( key ) {
 
 }
 
-panel.onAction = ( action, button ) => {
+// arg: the clicked button (copylink), a name (save) or a saved entry id (load, delete).
+panel.onAction = ( action, arg ) => {
 
 	if ( action === 'reset' ) {
 
@@ -496,15 +500,59 @@ panel.onAction = ( action, button ) => {
 		writeHash();
 		navigator.clipboard?.writeText( location.href ).then( () => {
 
-			const text = button.textContent;
-			button.textContent = 'Copied';
-			setTimeout( () => ( button.textContent = text ), 1200 );
+			const text = arg.textContent;
+			arg.textContent = 'Copied';
+			setTimeout( () => ( arg.textContent = text ), 1200 );
 
 		} );
+
+	} else if ( action === 'save' ) {
+
+		const result = storage.saveConfig( arg || autoName(), { ...params } );
+		refreshLibrary();
+		panel.flashSaved( result.ok ? ( result.replaced ? 'Updated' : 'Saved' ) : 'Not saved', result.ok ? result.entry.id : null );
+
+	} else if ( action === 'load' ) {
+
+		const entry = storage.listSaved().find( ( e ) => e.id === arg );
+		if ( ! entry ) return refreshLibrary();
+		Object.assign( params, DEFAULTS, sanitizeParams( entry.params ) );
+		panel.syncAll();
+		applyAll();
+		if ( rig.mode === 'orbit' ) rig.resetView();
+		scheduleHashWrite();
+
+	} else if ( action === 'delete' ) {
+
+		storage.deleteConfig( arg );
+		refreshLibrary();
 
 	}
 
 };
+
+// Default name for a save, e.g. "Copper, Dark studio" (numbered if taken).
+function autoName() {
+
+	const base = `${ MATERIALS[ params.material ].label }, ${ ENVIRONMENTS[ params.environment ].label }`;
+	let name = base;
+	for ( let i = 2; storage.hasSavedName( name ); i ++ ) name = `${ base } ${ i }`;
+	return name;
+
+}
+
+function refreshLibrary() {
+
+	panel.renderLibrary( storage.listSaved(), storage.storageAvailable() );
+
+}
+
+// Keep the list in sync when another tab saves or deletes.
+window.addEventListener( 'storage', ( e ) => {
+
+	if ( storage.isStorageEvent( e ) ) refreshLibrary();
+
+} );
 
 function randomize() {
 
@@ -558,26 +606,7 @@ function randomColor() {
 
 function readHash() {
 
-	const out = {};
-	const search = new URLSearchParams( location.hash.slice( 1 ) );
-	for ( const [ key, raw ] of search ) {
-
-		if ( ! ( key in DEFAULTS ) ) continue;
-		const def = DEFAULTS[ key ];
-		if ( typeof def === 'number' ) {
-
-			const v = parseFloat( raw );
-			if ( Number.isFinite( v ) ) out[ key ] = v;
-
-		} else if ( typeof def === 'boolean' ) out[ key ] = raw === '1' || raw === 'true';
-		else out[ key ] = raw;
-
-	}
-
-	if ( out.material && ! MATERIALS[ out.material ] ) delete out.material;
-	if ( out.environment && ! ENVIRONMENTS[ out.environment ] ) delete out.environment;
-	if ( out.quality && ! QUALITY[ out.quality ] ) delete out.quality;
-	return out;
+	return sanitizeParams( Object.fromEntries( new URLSearchParams( location.hash.slice( 1 ) ) ) );
 
 }
 
@@ -594,6 +623,7 @@ function writeHash() {
 
 	const hash = search.toString();
 	history.replaceState( null, '', hash ? '#' + hash : location.pathname + location.search );
+	storage.saveLast( { ...params } );
 
 }
 
@@ -613,7 +643,7 @@ const hint = document.getElementById( 'hint' );
 const HINTS = {
 	orbit: () => 'Drag to rotate <i>·</i> Right drag to pan <i>·</i> Scroll to zoom <i>·</i> Press <kbd>3</kbd> to ride through',
 	fly: () => `Drag to look <i>·</i> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move <i>·</i> <kbd>Q</kbd><kbd>E</kbd> down, up <i>·</i> <kbd>Shift</kbd> boost <i>·</i> Scroll for speed (${ rig.speedFactor.toFixed( 1 ) }×)`,
-	ride: () => 'Riding through the toroids <i>·</i> Drag to look around <i>·</i> <kbd>Esc</kbd> to leave',
+	ride: () => 'Drag or arrow keys to look around <i>·</i> <kbd>C</kbd> or double click to face forward <i>·</i> <kbd>Esc</kbd> to leave',
 };
 
 rig.onModeChange = ( mode ) => {
@@ -681,6 +711,7 @@ new ResizeObserver( resize ).observe( viewport );
 applyAll();
 panel.syncAll();
 updateColors();
+refreshLibrary();
 
 const home = rig.homePose();
 camera.position.copy( home.position );
